@@ -4,7 +4,6 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 import csv
-import stripe
 import json
 
 from .models import Fee, Payment
@@ -32,39 +31,37 @@ def payment_list(request):
 
 
 def initiate_payment(request, fee_id):
+    """Initiate a mobile money payment (MTN or Airtel).
+
+    This creates a pending Payment and returns provider-specific instructions.
+    In production this should call the provider's API (USSD/checkout) and return
+    the provider's payment URL or mobile instructions.
+    """
     fee = get_object_or_404(Fee, id=fee_id)
-    stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
-    if not stripe.api_key:
-        return HttpResponse('Stripe not configured. Set STRIPE_SECRET_KEY in environment.', status=500)
 
     # Create a Payment record (pending)
     payment = Payment.objects.create(fee=fee, amount=fee.balance())
 
-    domain = request.build_absolute_uri('/')[:-1]
-    success_url = request.build_absolute_uri(reverse('students:payment_success'))
-    cancel_url = request.build_absolute_uri(reverse('students:payment_cancel'))
+    # Provider selection via POST or GET param 'provider'
+    provider = (request.POST.get('provider') or request.GET.get('provider') or '').lower()
 
-    try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'usd',
-                    'product_data': {'name': f'Fee: {fee.term} - {fee.student.admission_no}'},
-                    'unit_amount': int(float(payment.amount) * 100),
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            success_url=success_url,
-            cancel_url=cancel_url,
-            metadata={'payment_id': payment.id},
+    if provider in ('mtn', 'airtel'):
+        # Placeholder instructions — replace with real API calls for production
+        instructions = (
+            f"To pay via {provider.upper()}, send {payment.amount} to the school's {provider.upper()} pay number"
+            f" and use reference {payment.id}. When payment completes a webhook should POST to the"
+            f" mobile webhook with JSON {{'payment_id': {payment.id}, 'status': 'completed', 'transaction_id': '...'}}."
         )
-        return redirect(session.url)
-    except Exception as e:
-        payment.status = Payment.STATUS_FAILED
-        payment.save()
-        return HttpResponse(f'Error creating Stripe session: {e}', status=500)
+        return JsonResponse({
+            'payment_id': payment.id,
+            'provider': provider,
+            'instructions': instructions,
+        })
+
+    # If no provider specified, render payments page where user can select provider
+    fees = Fee.objects.select_related('student').all()
+    payments = Payment.objects.select_related('fee__student').all().order_by('-created_at')
+    return render(request, 'students/payments.html', {'fees': fees, 'payments': payments})
 
 
 def payment_success(request):
@@ -113,39 +110,40 @@ def export_payments_csv(request):
 
 
 @csrf_exempt
-def stripe_webhook(request):
-    payload = request.body
-    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
-    webhook_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
-    stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+def mobile_money_webhook(request):
+    """Simple webhook endpoint to accept payment notifications from mobile money providers.
 
-    if webhook_secret:
-        try:
-            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-        except Exception as e:
-            return HttpResponseBadRequest()
-    else:
-        try:
-            event = json.loads(payload.decode('utf-8'))
-        except Exception:
-            event = None
+    Expected JSON body: {'payment_id': <int>, 'status': 'completed'|'failed', 'transaction_id': <str>}
+    This endpoint updates the Payment and Fee records accordingly.
+    """
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return HttpResponseBadRequest('Invalid JSON')
 
-    # Handle the checkout.session.completed event
-    if event and event['type'] == 'checkout.session.completed':
-        session = event['data']['object']
-        payment_id = session.get('metadata', {}).get('payment_id')
-        if payment_id:
-            try:
-                payment = Payment.objects.get(id=payment_id)
-                payment.transaction_id = session.get('payment_intent') or session.get('id')
-                payment.status = Payment.STATUS_COMPLETED
-                payment.save()
-                # Update fee paid amount
-                fee = payment.fee
-                fee.paid = fee.paid + payment.amount
-                fee.save()
-            except Payment.DoesNotExist:
-                pass
+    payment_id = payload.get('payment_id')
+    status = payload.get('status')
+    txn = payload.get('transaction_id', '')
+
+    if not payment_id or not status:
+        return HttpResponseBadRequest('payment_id and status required')
+
+    try:
+        payment = Payment.objects.get(id=payment_id)
+    except Payment.DoesNotExist:
+        return HttpResponse(status=404)
+
+    if status == 'completed':
+        payment.transaction_id = txn
+        payment.status = Payment.STATUS_COMPLETED
+        payment.save()
+        fee = payment.fee
+        fee.paid = fee.paid + payment.amount
+        fee.save()
+    elif status == 'failed':
+        payment.status = Payment.STATUS_FAILED
+        payment.transaction_id = txn
+        payment.save()
 
     return HttpResponse(status=200)
 

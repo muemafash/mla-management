@@ -35,7 +35,7 @@ set TWILIO_ACCOUNT_SID=ACxxxx
 set TWILIO_AUTH_TOKEN=yyyy
 set TWILIO_FROM_NUMBER=+256785960942
 set TWILIO_WHATSAPP_FROM=whatsapp:+256785960942
-set DEFAULT_FROM_EMAIL=school@yourdomain.org
+set DEFAULT_FROM_EMAIL=mukonolightacademy1@gmail.com 
 set REMINDER_DAYS=4
 ```
 

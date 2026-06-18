@@ -4,7 +4,6 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 import csv
-import stripe
 import json
 
 from .models import Fee, Payment
@@ -14,10 +13,6 @@ from .forms import ResultForm
 from django.contrib.auth.decorators import login_required, user_passes_test
 from .models import Notice
 from django.utils import timezone
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 from io import BytesIO
 
 
@@ -32,10 +27,18 @@ def payment_list(request):
 
 
 def initiate_payment(request, fee_id):
+    # Local import of stripe so the app can start even when stripe isn't installed for certain environments
+    try:
+        import stripe
+    except Exception:
+        stripe = None
+
     fee = get_object_or_404(Fee, id=fee_id)
-    stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
-    if not stripe.api_key:
-        return HttpResponse('Stripe not configured. Set STRIPE_SECRET_KEY in environment.', status=500)
+    stripe_api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
+    if not stripe_api_key or not stripe:
+        return HttpResponse('Stripe not configured or stripe package not installed. Set STRIPE_SECRET_KEY and install stripe.', status=500)
+
+    stripe.api_key = stripe_api_key
 
     # Create a Payment record (pending)
     payment = Payment.objects.create(fee=fee, amount=fee.balance())
@@ -114,6 +117,12 @@ def export_payments_csv(request):
 
 @csrf_exempt
 def stripe_webhook(request):
+    # Local import so missing stripe package doesn't break the whole app
+    try:
+        import stripe
+    except Exception:
+        return HttpResponse('stripe package not installed on server.', status=500)
+
     payload = request.body
     sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
     webhook_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
@@ -131,7 +140,7 @@ def stripe_webhook(request):
             event = None
 
     # Handle the checkout.session.completed event
-    if event and event['type'] == 'checkout.session.completed':
+    if event and event.get('type') == 'checkout.session.completed':
         session = event['data']['object']
         payment_id = session.get('metadata', {}).get('payment_id')
         if payment_id:
@@ -248,6 +257,16 @@ def parent_dashboard(request):
 
 @teacher_required
 def student_reportcard_pdf(request, student_id):
+    # Local imports for reportlab to avoid startup errors when not installed
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib import colors
+        from django.contrib.staticfiles import finders
+    except Exception:
+        return HttpResponse('PDF generation dependencies not installed (reportlab).', status=500)
+
     student = get_object_or_404(Student, id=student_id)
     results = Result.objects.filter(student=student).order_by('exam', 'subject')
 
@@ -265,13 +284,11 @@ def student_reportcard_pdf(request, student_id):
     elems.append(Spacer(1, 12))
     # Try to include logo if available at static/logo.png
     try:
-        from django.contrib.staticfiles import finders
         logo_path = finders.find('logo.png')
     except Exception:
         logo_path = None
     if logo_path:
         try:
-            from reportlab.platypus import Image
             img = Image(logo_path, width=80, height=80)
             elems.insert(0, img)
         except Exception:

@@ -1,0 +1,13 @@
+Dear {{ student.guardian.get_full_name|default:student.guardian.username }},
+
+This is a reminder that {{ student.user.get_full_name }} has an outstanding fee for term {{ fee.term }}.
+
+Amount: {{ fee.amount }}
+Paid: {{ fee.paid }}
+Balance: {{ balance }}
+Due date: {{ fee.due_date }}
+
+Please settle the balance via the payment link provided in the parent portal or contact the school office.
+
+Regards,
+Mukono Light Academy

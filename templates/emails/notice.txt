@@ -1,0 +1,10 @@
+Dear Parent,
+
+{{ notice.title }}
+
+{{ notice.message }}
+
+Start: {{ notice.start_date }}{% if notice.end_date %} - End: {{ notice.end_date }}{% endif %}
+
+Regards,
+Mukono Light Academy

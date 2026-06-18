@@ -1,0 +1,55 @@
+{% extends 'base.html' %}
+
+{% block content %}
+  <h2>Fees & Payments</h2>
+
+  <h3>Outstanding Fees</h3>
+  <table>
+    <thead>
+      <tr><th>Student</th><th>Admission No</th><th>Term</th><th>Amount</th><th>Paid</th><th>Balance</th><th>Action</th></tr>
+    </thead>
+    <tbody>
+      {% for fee in fees %}
+        <tr>
+          <td>{{ fee.student.user.get_full_name }}</td>
+          <td>{{ fee.student.admission_no }}</td>
+          <td>{{ fee.term }}</td>
+          <td>{{ fee.amount }}</td>
+          <td>{{ fee.paid }}</td>
+          <td>{{ fee.amount|floatformat:2|add:"-"|add:fee.paid }}</td>
+          <td>
+            <a href="{% url 'students:initiate_payment' fee.id %}">Pay</a>
+          </td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="7">No fees found.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <h3>Recent Payments</h3>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Student</th><th>Amount</th><th>Status</th><th>Date</th></tr>
+    </thead>
+    <tbody>
+      {% for p in payments %}
+        <tr>
+          <td>{{ p.id }}</td>
+          <td>{{ p.fee.student.user.get_full_name }}</td>
+          <td>{{ p.amount }}</td>
+          <td>{{ p.status }}</td>
+          <td>{{ p.created_at }}</td>
+        </tr>
+      {% empty %}
+        <tr><td colspan="5">No payments recorded.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  <p>
+    <a href="{% url 'students:export_fees_csv' %}">Export Fees CSV</a> |
+    <a href="{% url 'students:export_payments_csv' %}">Export Payments CSV</a>
+  </p>
+
+{% endblock %}

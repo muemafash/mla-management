@@ -1,0 +1,33 @@
+{% extends 'base.html' %}
+{% load dict_extras %}
+
+{% block content %}
+  <h2>Reportcard - {{ student.user.get_full_name }}</h2>
+  <p>Admission No: {{ student.admission_no }} | Class: {{ student.current_class }}</p>
+
+  {% for exam, marks in exams.items %}
+    <h3>{{ exam }}</h3>
+    <table>
+      <thead><tr><th>Subject</th><th>Score</th></tr></thead>
+      <tbody>
+        {% for m in marks %}
+          <tr><td>{{ m.subject }}</td><td>{{ m.score }}</td></tr>
+        {% endfor %}
+      </tbody>
+      <tfoot>
+        <tr><th>Average</th><th>{{ exam_averages|dict_get:exam|floatformat:2 }}</th></tr>
+      </tfoot>
+    </table>
+  {% empty %}
+    <p>No marks recorded.</p>
+  {% endfor %}
+
+  {% if overall_avg %}
+    <p><strong>Overall Average:</strong> {{ overall_avg|floatformat:2 }}</p>
+  {% endif %}
+
+  <p>
+    <a href="{% url 'students:teacher_dashboard' %}">Back to dashboard</a> |
+    <a href="{% url 'students:student_reportcard_pdf' student.id %}">Download PDF</a>
+  </p>
+{% endblock %}

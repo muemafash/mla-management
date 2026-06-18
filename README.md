@@ -1,15 +1,15 @@
-Payment integration (Stripe)
+Payment integration (MTN/Airtel)
 
-- To enable Stripe Checkout, set environment variables:
+- To enable MTN/Airtel Checkout, set environment variables:
 
 ```bash
-export STRIPE_SECRET_KEY="sk_test_..."  # On Windows use set or PowerShell $env:
-export STRIPE_WEBHOOK_SECRET="whsec_..."
+export MTN/Airtel_SECRET_KEY="sk_test_..."  # On Windows use set or PowerShell $env:
+export MTN/Airtel_WEBHOOK_SECRET="whsec_..."
 ```
 
 The app provides endpoints:
 	- `/students/payments/` - list fees and payments
-	- `/students/payments/create/<fee_id>/` - start a payment (redirects to Stripe)
+	- `/students/payments/create/<fee_id>/` - start a payment (redirects to MTN/Airtel)
 	- `/students/payments/success/` and `/students/payments/cancel/` - return pages
 	- `/students/export/fees/` and `/students/export/payments/` - CSV exports
 
@@ -29,8 +29,8 @@ Reminders (Email / SMS / WhatsApp)
 - Configure environment variables in your environment or deployment settings:
 
 ```powershell
-set STRIPE_SECRET_KEY=sk_test_...
-set STRIPE_WEBHOOK_SECRET=whsec_...
+set MTN/Airtel_SECRET_KEY=sk_test_...
+set MTN/Airtel_WEBHOOK_SECRET=whsec_...
 set TWILIO_ACCOUNT_SID=ACxxxx
 set TWILIO_AUTH_TOKEN=yyyy
 set TWILIO_FROM_NUMBER=+1234567890

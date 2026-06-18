@@ -85,7 +85,7 @@ Next steps (suggested):
 - Add more apps and REST endpoints (DRF) for integrations.
 - Implement front-end views for staff and parents.
 - Add permissions, roles and workflows for admissions, attendance and fee payments.
-# Mukono Light Academy - Django School Management
+# Mukono Light Academy School Management
 
 This repository contains a minimal Django-based school management system scaffold for Mukono Light Academy.
 

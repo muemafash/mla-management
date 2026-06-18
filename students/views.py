@@ -5,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 import csv
 import json
+import requests
 
 from .models import Fee, Payment
 from django.db import models
@@ -46,17 +47,58 @@ def initiate_payment(request, fee_id):
     provider = (request.POST.get('provider') or request.GET.get('provider') or '').lower()
 
     if provider in ('mtn', 'airtel'):
-        # Placeholder instructions — replace with real API calls for production
-        instructions = (
-            f"To pay via {provider.upper()}, send {payment.amount} to the school's {provider.upper()} pay number"
-            f" and use reference {payment.id}. When payment completes a webhook should POST to the"
-            f" mobile webhook with JSON {{'payment_id': {payment.id}, 'status': 'completed', 'transaction_id': '...'}}."
-        )
-        return JsonResponse({
-            'payment_id': payment.id,
-            'provider': provider,
-            'instructions': instructions,
-        })
+        # Require a payer phone number for mobile money initiation
+        phone = (request.POST.get('phone') or request.GET.get('phone') or '').strip()
+        if not phone:
+            return HttpResponseBadRequest('phone parameter is required for mobile money payments')
+
+        # Select provider configuration from settings
+        if provider == 'mtn':
+            api_url = getattr(settings, 'MTN_API_URL', None)
+            api_key = getattr(settings, 'MTN_API_KEY', None)
+        else:
+            api_url = getattr(settings, 'AIRTEL_API_URL', None)
+            api_key = getattr(settings, 'AIRTEL_API_KEY', None)
+
+        if not api_url or not api_key:
+            return HttpResponse(f'{provider.upper()} not configured. Set API URL and API key in settings.', status=500)
+
+        # Build provider payload (provider-specific APIs differ; adapt as needed)
+        payload = {
+            'externalId': str(payment.id),
+            'amount': str(payment.amount),
+            'currency': getattr(settings, 'CURRENCY', 'USD'),
+            'payer': {
+                'partyIdType': 'MSISDN',
+                'partyId': phone,
+            },
+        }
+        headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
+
+        try:
+            resp = requests.post(api_url, json=payload, headers=headers, timeout=15)
+        except requests.RequestException as e:
+            payment.status = Payment.STATUS_FAILED
+            payment.save()
+            return HttpResponse(f'Error initiating {provider} payment: {e}', status=502)
+
+        # Persist provider response if available
+        try:
+            data = resp.json()
+        except Exception:
+            data = {'status_code': resp.status_code, 'text': resp.text}
+
+        # Common handling: if provider accepted the request, mark pending and return instructions
+        if resp.status_code in (200, 201):
+            payment.transaction_id = data.get('transactionId') or data.get('reference') or ''
+            payment.status = Payment.STATUS_PENDING
+            payment.save()
+            return JsonResponse({'payment_id': payment.id, 'provider': provider, 'provider_response': data})
+        else:
+            payment.status = Payment.STATUS_FAILED
+            payment.transaction_id = data.get('transactionId') or data.get('reference') or ''
+            payment.save()
+            return HttpResponse(f'Provider returned error: {resp.status_code} - {resp.text}', status=502)
 
     # If no provider specified, render payments page where user can select provider
     fees = Fee.objects.select_related('student').all()
@@ -145,6 +187,13 @@ def mobile_money_webhook(request):
         payment.transaction_id = txn
         payment.save()
 
+    return HttpResponse(status=200)
+
+
+# Backwards-compatibility stub for Stripe webhook URL (removed in favour of mobile money)
+@csrf_exempt
+def stripe_webhook(request):
+    # If Stripe integration is reintroduced, replace this stub with real handling.
     return HttpResponse(status=200)
 
 

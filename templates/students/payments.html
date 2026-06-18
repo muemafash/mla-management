@@ -18,7 +18,23 @@
           <td>{{ fee.paid }}</td>
           <td>{{ fee.amount|floatformat:2|add:"-"|add:fee.paid }}</td>
           <td>
-            <a href="{% url 'students:initiate_payment' fee.id %}">Pay</a>
+            <!-- Inline payment form -->
+            <form class="payment-form" data-fee-id="{{ fee.id }}" method="post" action="{% url 'students:initiate_payment' fee.id %}">
+              {% csrf_token %}
+              <label>
+                Provider:
+                <select name="provider">
+                  <option value="mtn">MTN</option>
+                  <option value="airtel">Airtel</option>
+                </select>
+              </label>
+              <label>
+                Phone:
+                <input type="text" name="phone" placeholder="2567XXXXXXXX" required />
+              </label>
+              <button type="submit">Pay</button>
+            </form>
+            <div class="payment-result" id="payment-result-{{ fee.id }}"></div>
           </td>
         </tr>
       {% empty %}
@@ -51,5 +67,40 @@
     <a href="{% url 'students:export_fees_csv' %}">Export Fees CSV</a> |
     <a href="{% url 'students:export_payments_csv' %}">Export Payments CSV</a>
   </p>
+
+  <script>
+    // Handle inline payment form submissions via fetch
+    document.addEventListener('DOMContentLoaded', function () {
+      document.querySelectorAll('.payment-form').forEach(function (form) {
+        form.addEventListener('submit', function (e) {
+          e.preventDefault();
+          var feeId = form.dataset.feeId;
+          var url = form.action;
+          var formData = new FormData(form);
+          var resultDiv = document.getElementById('payment-result-' + feeId);
+          resultDiv.textContent = 'Processing...';
+
+          fetch(url, {
+            method: 'POST',
+            headers: {
+              'X-CSRFToken': formData.get('csrfmiddlewaretoken')
+            },
+            body: formData
+          }).then(function (resp) {
+            if (!resp.ok) throw resp;
+            return resp.json();
+          }).then(function (data) {
+            resultDiv.textContent = 'Payment initiated: ' + (data.provider_response && data.provider_response.message ? data.provider_response.message : JSON.stringify(data.provider_response));
+          }).catch(function (err) {
+            if (err.json) {
+              err.json().then(function (e) { resultDiv.textContent = 'Error: ' + (e.detail || JSON.stringify(e)); }).catch(function () { resultDiv.textContent = 'Error initiating payment'; });
+            } else {
+              resultDiv.textContent = 'Error initiating payment';
+            }
+          });
+        });
+      });
+    });
+  </script>
 
 {% endblock %}

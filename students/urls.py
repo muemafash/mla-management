@@ -12,6 +12,8 @@ urlpatterns = [
     path('export/fees/', views.export_fees_csv, name='export_fees_csv'),
     path('export/payments/', views.export_payments_csv, name='export_payments_csv'),
     path('webhook/stripe/', views.stripe_webhook, name='stripe_webhook'),
+    path('webhook/mobile/', views.mobile_money_webhook, name='mobile_money_webhook'),
+    path('webhook/mobile/', views.mobile_money_webhook, name='mobile_money_webhook'),
     # Teacher area
     path('teacher/', views.teacher_dashboard, name='teacher_dashboard'),
     path('teacher/add-mark/', views.add_mark, name='add_mark'),

@@ -31,8 +31,8 @@ Reminders (Email / SMS / WhatsApp)
 ```powershell
 set MTN/Airtel_SECRET_KEY=sk_test_...
 set MTN/Airtel_WEBHOOK_SECRET=whsec_...
-set TWILIO_ACCOUNT_SID=ACxxxx
-set TWILIO_AUTH_TOKEN=yyyy
+set TWILIO_ACCOUNT_SID=ACf1b4f7280fbccb200df664c4bc51ebc7
+set TWILIO_AUTH_TOKEN=7d9deed007a1a6d17e5941f83555e9e5
 set TWILIO_FROM_NUMBER=+256785960942
 set TWILIO_WHATSAPP_FROM=whatsapp:+256785960942
 set DEFAULT_FROM_EMAIL=mukonolightacademy1@gmail.com 

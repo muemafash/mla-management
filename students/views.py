@@ -14,10 +14,6 @@ from .forms import ResultForm
 from django.contrib.auth.decorators import login_required, user_passes_test
 from .models import Notice
 from django.utils import timezone
-from reportlab.lib.pagesizes import A4
-from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
-from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib import colors
 from io import BytesIO
 
 
@@ -39,119 +35,6 @@ def initiate_payment(request, fee_id):
     the provider's payment URL or mobile instructions.
     """
     fee = get_object_or_404(Fee, id=fee_id)
-
-    # Create a Payment record (pending)
-    payment = Payment.objects.create(fee=fee, amount=fee.balance())
-
-    # Provider selection via POST or GET param 'provider'
-    provider = (request.POST.get('provider') or request.GET.get('provider') or '').lower()
-
-    if provider in ('mtn', 'airtel'):
-        # Require a payer phone number for mobile money initiation
-        phone = (request.POST.get('phone') or request.GET.get('phone') or '').strip()
-        if not phone:
-            return HttpResponseBadRequest('phone parameter is required for mobile money payments')
-
-        # Select provider configuration from settings
-        if provider == 'mtn':
-            api_url = getattr(settings, 'MTN_API_URL', None)
-            api_key = getattr(settings, 'MTN_API_KEY', None)
-        else:
-            api_url = getattr(settings, 'AIRTEL_API_URL', None)
-            api_key = getattr(settings, 'AIRTEL_API_KEY', None)
-
-        if not api_url or not api_key:
-            return HttpResponse(f'{provider.upper()} not configured. Set API URL and API key in settings.', status=500)
-
-        # Build provider payload (provider-specific APIs differ; adapt as needed)
-        payload = {
-            'externalId': str(payment.id),
-            'amount': str(payment.amount),
-            'currency': getattr(settings, 'CURRENCY', 'USD'),
-            'payer': {
-                'partyIdType': 'MSISDN',
-                'partyId': phone,
-            },
-        }
-        headers = {'Authorization': f'Bearer {api_key}', 'Content-Type': 'application/json'}
-
-        try:
-            resp = requests.post(api_url, json=payload, headers=headers, timeout=15)
-        except requests.RequestException as e:
-            payment.status = Payment.STATUS_FAILED
-            payment.save()
-            return HttpResponse(f'Error initiating {provider} payment: {e}', status=502)
-
-        # Persist provider response if available
-        try:
-            data = resp.json()
-        except Exception:
-            data = {'status_code': resp.status_code, 'text': resp.text}
-
-        # Common handling: if provider accepted the request, mark pending and return instructions
-        if resp.status_code in (200, 201):
-            payment.transaction_id = data.get('transactionId') or data.get('reference') or ''
-            payment.status = Payment.STATUS_PENDING
-            payment.save()
-            return JsonResponse({'payment_id': payment.id, 'provider': provider, 'provider_response': data})
-        else:
-            payment.status = Payment.STATUS_FAILED
-            payment.transaction_id = data.get('transactionId') or data.get('reference') or ''
-            payment.save()
-            return HttpResponse(f'Provider returned error: {resp.status_code} - {resp.text}', status=502)
-
-    # If no provider specified, render payments page where user can select provider
-    fees = Fee.objects.select_related('student').all()
-    payments = Payment.objects.select_related('fee__student').all().order_by('-created_at')
-    return render(request, 'students/payments.html', {'fees': fees, 'payments': payments})
-
-
-def payment_success(request):
-    return render(request, 'students/payment_success.html')
-
-
-def payment_cancel(request):
-    return render(request, 'students/payment_cancel.html')
-
-
-def export_fees_csv(request):
-    queryset = Fee.objects.select_related('student').all()
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename=fees_export.csv'
-    writer = csv.writer(response)
-    writer.writerow(['student', 'admission_no', 'term', 'amount', 'paid', 'due_date'])
-    for obj in queryset:
-        writer.writerow([
-            obj.student.user.get_full_name(),
-            obj.student.admission_no,
-            obj.term,
-            obj.amount,
-            obj.paid,
-            obj.due_date,
-        ])
-    return response
-
-
-def export_payments_csv(request):
-    queryset = Payment.objects.select_related('fee__student').all()
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename=payments_export.csv'
-    writer = csv.writer(response)
-    writer.writerow(['id', 'student', 'admission_no', 'amount', 'status', 'transaction_id', 'created_at'])
-    for p in queryset:
-        writer.writerow([
-            p.id,
-            p.fee.student.user.get_full_name(),
-            p.fee.student.admission_no,
-            p.amount,
-            p.status,
-            p.transaction_id,
-            p.created_at,
-        ])
-    return response
-
-
-@csrf_exempt
 def mobile_money_webhook(request):
     """Simple webhook endpoint to accept payment notifications from mobile money providers.
 
@@ -295,6 +178,16 @@ def parent_dashboard(request):
 
 @teacher_required
 def student_reportcard_pdf(request, student_id):
+    # Local imports for reportlab to avoid startup errors when not installed
+    try:
+        from reportlab.lib.pagesizes import A4
+        from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle, Image
+        from reportlab.lib.styles import getSampleStyleSheet
+        from reportlab.lib import colors
+        from django.contrib.staticfiles import finders
+    except Exception:
+        return HttpResponse('PDF generation dependencies not installed (reportlab).', status=500)
+
     student = get_object_or_404(Student, id=student_id)
     results = Result.objects.filter(student=student).order_by('exam', 'subject')
 
@@ -312,13 +205,11 @@ def student_reportcard_pdf(request, student_id):
     elems.append(Spacer(1, 12))
     # Try to include logo if available at static/logo.png
     try:
-        from django.contrib.staticfiles import finders
         logo_path = finders.find('logo.png')
     except Exception:
         logo_path = None
     if logo_path:
         try:
-            from reportlab.platypus import Image
             img = Image(logo_path, width=80, height=80)
             elems.insert(0, img)
         except Exception:

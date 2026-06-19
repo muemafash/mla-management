@@ -1,15 +1,15 @@
-Payment integration (Stripe)
+Payment integration (MTN/Airtel)
 
-- To enable Stripe Checkout, set environment variables:
+- To enable MTN/Airtel Checkout, set environment variables:
 
 ```bash
-export STRIPE_SECRET_KEY="sk_test_..."  # On Windows use set or PowerShell $env:
-export STRIPE_WEBHOOK_SECRET="whsec_..."
+export MTN/Airtel_SECRET_KEY="sk_test_..."  # On Windows use set or PowerShell $env:
+export MTN/Airtel_WEBHOOK_SECRET="whsec_..."
 ```
 
 The app provides endpoints:
 	- `/students/payments/` - list fees and payments
-	- `/students/payments/create/<fee_id>/` - start a payment (redirects to Stripe)
+	- `/students/payments/create/<fee_id>/` - start a payment (redirects to MTN/Airtel)
 	- `/students/payments/success/` and `/students/payments/cancel/` - return pages
 	- `/students/export/fees/` and `/students/export/payments/` - CSV exports
 
@@ -29,14 +29,14 @@ Reminders (Email / SMS / WhatsApp)
 - Configure environment variables in your environment or deployment settings:
 
 ```powershell
-set STRIPE_SECRET_KEY=sk_test_...
-set STRIPE_WEBHOOK_SECRET=whsec_...
-set TWILIO_ACCOUNT_SID=ACxxxx
-set TWILIO_AUTH_TOKEN=yyyy
-set TWILIO_FROM_NUMBER=+1234567890
-set TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
-set DEFAULT_FROM_EMAIL=school@yourdomain.org
-set REMINDER_DAYS=3
+set MTN/Airtel_SECRET_KEY=sk_test_...
+set MTN/Airtel_WEBHOOK_SECRET=whsec_...
+set TWILIO_ACCOUNT_SID=ACf1b4f7280fbccb200df664c4bc51ebc7
+set TWILIO_AUTH_TOKEN=7d9deed007a1a6d17e5941f83555e9e5
+set TWILIO_FROM_NUMBER=+256785960942
+set TWILIO_WHATSAPP_FROM=whatsapp:+256785960942
+set DEFAULT_FROM_EMAIL=mukonolightacademy1@gmail.com 
+set REMINDER_DAYS=4
 ```
 
 - Run reminders manually with the management command:
@@ -85,7 +85,7 @@ Next steps (suggested):
 - Add more apps and REST endpoints (DRF) for integrations.
 - Implement front-end views for staff and parents.
 - Add permissions, roles and workflows for admissions, attendance and fee payments.
-# Mukono Light Academy - Django School Management
+# Mukono Light Academy School Management
 
 This repository contains a minimal Django-based school management system scaffold for Mukono Light Academy.
 

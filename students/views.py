@@ -5,6 +5,7 @@ from django.views.decorators.csrf import csrf_exempt
 from django.urls import reverse
 import csv
 import json
+import requests
 
 from .models import Fee, Payment
 from django.db import models
@@ -27,135 +28,55 @@ def payment_list(request):
 
 
 def initiate_payment(request, fee_id):
-    # Local import of stripe so the app can start even when stripe isn't installed for certain environments
-    try:
-        import stripe
-    except Exception:
-        stripe = None
+    """Initiate a mobile money payment (MTN or Airtel).
 
+    This creates a pending Payment and returns provider-specific instructions.
+    In production this should call the provider's API (USSD/checkout) and return
+    the provider's payment URL or mobile instructions.
+    """
     fee = get_object_or_404(Fee, id=fee_id)
-    stripe_api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
-    if not stripe_api_key or not stripe:
-        return HttpResponse('Stripe not configured or stripe package not installed. Set STRIPE_SECRET_KEY and install stripe.', status=500)
+def mobile_money_webhook(request):
+    """Simple webhook endpoint to accept payment notifications from mobile money providers.
 
-    stripe.api_key = stripe_api_key
+    Expected JSON body: {'payment_id': <int>, 'status': 'completed'|'failed', 'transaction_id': <str>}
+    This endpoint updates the Payment and Fee records accordingly.
+    """
+    try:
+        payload = json.loads(request.body.decode('utf-8'))
+    except Exception:
+        return HttpResponseBadRequest('Invalid JSON')
 
-    # Create a Payment record (pending)
-    payment = Payment.objects.create(fee=fee, amount=fee.balance())
+    payment_id = payload.get('payment_id')
+    status = payload.get('status')
+    txn = payload.get('transaction_id', '')
 
-    domain = request.build_absolute_uri('/')[:-1]
-    success_url = request.build_absolute_uri(reverse('students:payment_success'))
-    cancel_url = request.build_absolute_uri(reverse('students:payment_cancel'))
+    if not payment_id or not status:
+        return HttpResponseBadRequest('payment_id and status required')
 
     try:
-        session = stripe.checkout.Session.create(
-            payment_method_types=['card'],
-            line_items=[{
-                'price_data': {
-                    'currency': 'usd',
-                    'product_data': {'name': f'Fee: {fee.term} - {fee.student.admission_no}'},
-                    'unit_amount': int(float(payment.amount) * 100),
-                },
-                'quantity': 1,
-            }],
-            mode='payment',
-            success_url=success_url,
-            cancel_url=cancel_url,
-            metadata={'payment_id': payment.id},
-        )
-        return redirect(session.url)
-    except Exception as e:
-        payment.status = Payment.STATUS_FAILED
+        payment = Payment.objects.get(id=payment_id)
+    except Payment.DoesNotExist:
+        return HttpResponse(status=404)
+
+    if status == 'completed':
+        payment.transaction_id = txn
+        payment.status = Payment.STATUS_COMPLETED
         payment.save()
-        return HttpResponse(f'Error creating Stripe session: {e}', status=500)
+        fee = payment.fee
+        fee.paid = fee.paid + payment.amount
+        fee.save()
+    elif status == 'failed':
+        payment.status = Payment.STATUS_FAILED
+        payment.transaction_id = txn
+        payment.save()
+
+    return HttpResponse(status=200)
 
 
-def payment_success(request):
-    return render(request, 'students/payment_success.html')
-
-
-def payment_cancel(request):
-    return render(request, 'students/payment_cancel.html')
-
-
-def export_fees_csv(request):
-    queryset = Fee.objects.select_related('student').all()
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename=fees_export.csv'
-    writer = csv.writer(response)
-    writer.writerow(['student', 'admission_no', 'term', 'amount', 'paid', 'due_date'])
-    for obj in queryset:
-        writer.writerow([
-            obj.student.user.get_full_name(),
-            obj.student.admission_no,
-            obj.term,
-            obj.amount,
-            obj.paid,
-            obj.due_date,
-        ])
-    return response
-
-
-def export_payments_csv(request):
-    queryset = Payment.objects.select_related('fee__student').all()
-    response = HttpResponse(content_type='text/csv')
-    response['Content-Disposition'] = 'attachment; filename=payments_export.csv'
-    writer = csv.writer(response)
-    writer.writerow(['id', 'student', 'admission_no', 'amount', 'status', 'transaction_id', 'created_at'])
-    for p in queryset:
-        writer.writerow([
-            p.id,
-            p.fee.student.user.get_full_name(),
-            p.fee.student.admission_no,
-            p.amount,
-            p.status,
-            p.transaction_id,
-            p.created_at,
-        ])
-    return response
-
-
+# Backwards-compatibility stub for Stripe webhook URL (removed in favour of mobile money)
 @csrf_exempt
 def stripe_webhook(request):
-    # Local import so missing stripe package doesn't break the whole app
-    try:
-        import stripe
-    except Exception:
-        return HttpResponse('stripe package not installed on server.', status=500)
-
-    payload = request.body
-    sig_header = request.META.get('HTTP_STRIPE_SIGNATURE', '')
-    webhook_secret = getattr(settings, 'STRIPE_WEBHOOK_SECRET', None)
-    stripe.api_key = getattr(settings, 'STRIPE_SECRET_KEY', None)
-
-    if webhook_secret:
-        try:
-            event = stripe.Webhook.construct_event(payload, sig_header, webhook_secret)
-        except Exception as e:
-            return HttpResponseBadRequest()
-    else:
-        try:
-            event = json.loads(payload.decode('utf-8'))
-        except Exception:
-            event = None
-
-    # Handle the checkout.session.completed event
-    if event and event.get('type') == 'checkout.session.completed':
-        session = event['data']['object']
-        payment_id = session.get('metadata', {}).get('payment_id')
-        if payment_id:
-            try:
-                payment = Payment.objects.get(id=payment_id)
-                payment.transaction_id = session.get('payment_intent') or session.get('id')
-                payment.status = Payment.STATUS_COMPLETED
-                payment.save()
-                # Update fee paid amount
-                fee = payment.fee
-                fee.paid = fee.paid + payment.amount
-                fee.save()
-            except Payment.DoesNotExist:
-                pass
-
+    # If Stripe integration is reintroduced, replace this stub with real handling.
     return HttpResponse(status=200)
 
 

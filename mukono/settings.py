@@ -26,18 +26,22 @@ INSTALLED_APPS = [
     'rest_framework_simplejwt',
     'corsheaders',
     'attendance',
-
+    'reports',
+    'django_extensions',
+    
 ]
 
 MIDDLEWARE = [
+    'students.middleware.DisableCSRFForAPI',
     'corsheaders.middleware.CorsMiddleware', 
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
-    'django.middleware.csrf.CsrfViewMiddleware',
+    #'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
+    'students.middleware.DisableCSRFForAPI',
 ]
 
 ROOT_URLCONF = 'mukono.urls'
@@ -146,6 +150,11 @@ SIMPLE_JWT = {
 # CORS settings
 CORS_ALLOW_ALL_ORIGINS = True  # For development only!
 CORS_ALLOW_CREDENTIALS = True
+
+CSRF_TRUSTED_ORIGINS = [
+    'http://localhost:8000',
+    'http://127.0.0.1:8000',
+]
 
 # Or for more specific control:
 # CORS_ALLOWED_ORIGINS = [

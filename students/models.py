@@ -68,7 +68,6 @@ class Notice(models.Model):
         return f"{self.title}"
 
 
-
 class Payment(models.Model):
     STATUS_PENDING = 'pending'
     STATUS_COMPLETED = 'completed'
@@ -89,3 +88,86 @@ class Payment(models.Model):
     def __str__(self):
         return f"Payment {self.id} - {self.fee.student.admission_no} - {self.amount} ({self.status})"
 
+
+# ============================================
+# TIMETABLE AND CLASS SUBJECTS MODELS
+# ============================================
+
+class Timetable(models.Model):
+    """Timetable entry for a class"""
+    
+    DAYS_OF_WEEK = [
+        ('monday', 'Monday'),
+        ('tuesday', 'Tuesday'),
+        ('wednesday', 'Wednesday'),
+        ('thursday', 'Thursday'),
+        ('friday', 'Friday'),
+        ('saturday', 'Saturday'),
+        ('sunday', 'Sunday'),
+    ]
+    
+    class_name = models.ForeignKey(
+        ClassRoom,
+        on_delete=models.CASCADE,
+        related_name='timetable_entries'
+    )
+    
+    day = models.CharField(max_length=20, choices=DAYS_OF_WEEK)
+    start_time = models.TimeField()
+    end_time = models.TimeField()
+    subject = models.CharField(max_length=100)
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='timetable_entries'
+    )
+    
+    room = models.CharField(max_length=50, blank=True)
+    notes = models.TextField(blank=True)
+    
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['day', 'start_time']
+        verbose_name = 'Timetable'
+        verbose_name_plural = 'Timetable Entries'
+        unique_together = ['class_name', 'day', 'start_time']  # Prevent duplicate entries
+    
+    def __str__(self):
+        return f"{self.class_name.name} - {self.get_day_display()} - {self.subject}"
+
+
+class ClassSubject(models.Model):
+    """Subjects taught in a class"""
+    
+    class_name = models.ForeignKey(
+        ClassRoom,
+        on_delete=models.CASCADE,
+        related_name='subjects'
+    )
+    
+    name = models.CharField(max_length=100)
+    code = models.CharField(max_length=20, blank=True)
+    teacher = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='taught_subjects'
+    )
+    
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        ordering = ['name']
+        verbose_name = 'Class Subject'
+        verbose_name_plural = 'Class Subjects'
+        unique_together = ['class_name', 'name']
+    
+    def __str__(self):
+        return f"{self.class_name.name} - {self.name}"

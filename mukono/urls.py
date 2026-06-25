@@ -8,6 +8,7 @@ urlpatterns = [
     path('', include('students.urls')),
     path('api/users/', include('users.urls')),  # Users API endpoints
     path('api/attendance/', include('attendance.urls')),  # Attendance API endpoints
+    path('api/reports/', include('reports.urls')),  # Reports API endpoints
 ]
 
 # Serve static and media files in development

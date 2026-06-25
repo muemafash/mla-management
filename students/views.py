@@ -35,6 +35,20 @@ def initiate_payment(request, fee_id):
     the provider's payment URL or mobile instructions.
     """
     fee = get_object_or_404(Fee, id=fee_id)
+    # Add your payment initiation logic here
+    return render(request, 'students/initiate_payment.html', {'fee': fee})
+
+
+def payment_success(request):
+    """Payment success page"""
+    return render(request, 'students/payment_success.html')
+
+
+def payment_cancel(request):
+    """Payment cancelled page"""
+    return render(request, 'students/payment_cancel.html')
+
+
 def mobile_money_webhook(request):
     """Simple webhook endpoint to accept payment notifications from mobile money providers.
 
@@ -78,6 +92,50 @@ def mobile_money_webhook(request):
 def stripe_webhook(request):
     # If Stripe integration is reintroduced, replace this stub with real handling.
     return HttpResponse(status=200)
+
+
+def export_fees_csv(request):
+    """Export fees as CSV"""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="fees.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Student', 'Fee Type', 'Amount Due', 'Paid', 'Balance', 'Status'])
+    
+    fees = Fee.objects.select_related('student').all()
+    for fee in fees:
+        writer.writerow([
+            fee.student.user.get_full_name(),
+            fee.fee_type,
+            fee.amount_due,
+            fee.paid,
+            fee.balance,
+            fee.status
+        ])
+    
+    return response
+
+
+def export_payments_csv(request):
+    """Export payments as CSV"""
+    response = HttpResponse(content_type='text/csv')
+    response['Content-Disposition'] = 'attachment; filename="payments.csv"'
+    
+    writer = csv.writer(response)
+    writer.writerow(['Student', 'Fee Type', 'Amount', 'Date', 'Payment Method', 'Status'])
+    
+    payments = Payment.objects.select_related('fee__student').all()
+    for payment in payments:
+        writer.writerow([
+            payment.fee.student.user.get_full_name(),
+            payment.fee.fee_type,
+            payment.amount,
+            payment.created_at.strftime('%Y-%m-%d'),
+            payment.payment_method,
+            payment.status
+        ])
+    
+    return response
 
 
 def _is_teacher(user):
@@ -150,32 +208,6 @@ def student_reportcard(request, student_id):
     })
 
 
-@parent_required
-def parent_dashboard(request):
-    user = request.user
-    # get children assigned to this parent
-    children = getattr(user, 'children', None)
-    if children is None:
-        children = []
-    else:
-        children = children.select_related('user', 'current_class').all()
-
-    # notices: ones meant for parents and either global (no classes) or match child's class
-    today = timezone.now().date()
-    notices = Notice.objects.filter(for_parents=True).filter(
-        models.Q(classes__isnull=True) | models.Q(classes__in=[c.current_class for c in children])
-    ).distinct()
-
-    # fees for children
-    fees = Fee.objects.filter(student__in=children)
-
-    return render(request, 'students/parent_dashboard.html', {
-        'children': children,
-        'notices': notices,
-        'fees': fees,
-    })
-
-
 @teacher_required
 def student_reportcard_pdf(request, student_id):
     # Local imports for reportlab to avoid startup errors when not installed
@@ -243,3 +275,29 @@ def student_reportcard_pdf(request, student_id):
     resp = HttpResponse(pdf, content_type='application/pdf')
     resp['Content-Disposition'] = f'attachment; filename=reportcard_{student.admission_no}.pdf'
     return resp
+
+
+@parent_required
+def parent_dashboard(request):
+    user = request.user
+    # get children assigned to this parent
+    children = getattr(user, 'children', None)
+    if children is None:
+        children = []
+    else:
+        children = children.select_related('user', 'current_class').all()
+
+    # notices: ones meant for parents and either global (no classes) or match child's class
+    today = timezone.now().date()
+    notices = Notice.objects.filter(for_parents=True).filter(
+        models.Q(classes__isnull=True) | models.Q(classes__in=[c.current_class for c in children])
+    ).distinct()
+
+    # fees for children
+    fees = Fee.objects.filter(student__in=children)
+
+    return render(request, 'students/parent_dashboard.html', {
+        'children': children,
+        'notices': notices,
+        'fees': fees,
+    })

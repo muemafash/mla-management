@@ -7,6 +7,7 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('students.urls')),
     path('api/users/', include('users.urls')),  # Users API endpoints
+    path('api/attendance/', include('attendance.urls')),  # Attendance API endpoints
 ]
 
 # Serve static and media files in development
